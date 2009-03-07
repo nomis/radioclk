@@ -1,0 +1,21 @@
+#!/bin/sh -e
+
+# Source debconf library.
+. /usr/share/debconf/confmodule
+
+RC="/etc/default/radioclk"
+
+# Load the current value if there is any
+if test -f $RC; then
+	. $RC
+	if test ! -z "$PORT"; then
+		db_set radioclk/serialport "$PORT"
+	fi
+fi
+
+db_input high radioclk/serialport || true
+db_go
+
+db_input medium radioclk/configure_ntp || true
+db_go
+

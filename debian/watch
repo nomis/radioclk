@@ -1,0 +1,4 @@
+version=2
+
+http://www.buzzard.org.uk/jonathan/radioclock.html	\
+	radioclk-(.*)\.tar\.gz	debian	uupdate

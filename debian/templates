@@ -1,0 +1,23 @@
+Template: radioclk/serialport
+Type: string
+Default: ttyS0
+Description: Which serial port is the radio receiver connected to?
+ Your time signal receiver should be connected to a serial port.
+ Please enter the device name of the serial port, without the /dev/
+ part.
+ .
+ eg. For the second serial port, /dev/ttyS1, enter ttyS1.
+
+Template: radioclk/configure_ntp
+Type: note
+Description: You must configure your NTP server.
+ Radioclkd will provide service to your ntpd process only if you tell
+ ntpd about it. To do this, you must include the line
+  server 127.127.28.0
+ in /etc/ntpd.conf. Alternatively, you can use "dpkg-reconfigure
+ ntp-refclock" to do the same thing.
+ .
+ Also, it may be useful to add a line to /etc/ntpd.conf such as
+  fudge 127.127.28.0 time1 0.0185 refid MSF
+ to correct for offset errors, and to change the displayed reference
+ clock ID.

@@ -1,0 +1,18 @@
+radioclk for Debian
+-------------------
+
+Radioclkd will provide service to your ntpd process only if you tell
+ntpd about it. To do this, you must include the line
+
+	server 127.127.28.0
+
+in /etc/ntpd.conf.
+
+Also, it may be useful to add a line to /etc/ntpd.conf such as
+
+	fudge 127.127.28.0 time1 0.0185 refid MSF
+
+to correct for offset errors (using time1), and to change the displayed
+reference clock ID (using refid).
+
+ -- Paul Martin <pm@debian.org>, Wed, 27 Feb 2002 01:21:13 +0000

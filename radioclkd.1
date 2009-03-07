@@ -1,0 +1,170 @@
+.\" radioclkd.1 -- manual page for radioclkd
+.\"
+.\" Copyright (c) 2002-03 Jonathan A. Buzzard (jonathan@buzzard.org.uk)
+.\"
+.\" $Log: radioclkd.1,v $
+.\" Revision 1.6  2003/01/20 16:41:40  jab
+.\" removed references to WWVB decoding being untested
+.\" added note about lockups with PPS kit and the DCD line
+.\"
+.\" Revision 1.5  2002/10/25 14:15:24  jab
+.\" merged Debian patches to the manpage for DSR line
+.\"
+.\" Revision 1.4  2002/03/16 00:30:47  jab
+.\" take account of the fact two clocks can be handled on the one serial port
+.\"
+.\" Revision 1.3  2002/03/04 12:59:09  jab
+.\" removed references to DCF77 code being untested
+.\"
+.\" Revision 1.2  2002/02/08 15:25:37  jab
+.\" removed references to selecting radio clock type
+.\" added details of how to delete the shared memory segment
+.\"
+.\" Revision 1.1  2002/01/30 10:28:42  jab
+.\" Initial revision
+.\" 
+.\" Permission is granted to make and distribute verbatim copies of this
+.\" manual provided the copyright notice and this permission notice are
+.\" preserved on all copies.
+.\" 
+.\" Permission is granted to copy and distribute modified versions of this
+.\" manual under the conditions for verbatim copying, provided that the
+.\" entire resulting derived work is distributed under the terms of a
+.\" permission notice identical to this one
+.\" 
+.\" The author(s) assume no responsibility for errors or omissions, or for
+.\" damages resulting from the use of the information contained herein. The
+.\" author(s) may not have taken the same level of care in the production of
+.\" this manual, which is licensed free of charge, as they might when working
+.\" professionally.
+.\" 
+.\" Formatted or processed versions of this manual, if unaccompanied by
+.\" the source, must acknowledge the copyright and authors of this work.
+.\"
+.\" $Id: radioclkd.1,v 1.6 2003/01/20 16:41:40 jab Exp jab $
+.\"
+.TH RADIOCLKD 1 "19 Jan 2003" "Version 1.0" "Network Time Protocol Daemon"
+.SH NAME
+radioclkd \- decode time from radio clock(s) attached to serial port
+.SH SYNOPSIS
+.B radioclkd [ \-tphv ] device
+.SH DESCRIPTION
+.B radioclkd
+is a simple daemon that decodes the time from a radio clock device attached to
+the DCD and/or CTS and/or DSR status lines of serial port of a computer. It is
+able to decode the DCF77, MSF and WWVB time signals. The received time is then
+sent to
+.B ntpd
+using the shared memory reference clock driver. The type of time signal being
+received is automatically determined. If you have problems getting the program
+to work using interrupts, the following command is known to help in many
+instances. If this fails you can always fall back to the polling method.
+.IP
+stty crtscts < /dev/ttyS0
+.PP
+Details on a cheap and easy to make device for receiving these time signals
+can be found at
+.IP
+http://www.buzzard.org.uk/jonathan/radioclock.html
+.SH OPTIONS
+.TP
+.B \-p, \-\-poll
+Poll the serial port for changes of status in the DCD, CTS and DSR lines
+rather than use interrupts
+.TP
+.B \-t, \-\-test
+Enter test mode printing the length of each pulse and the decoded time at
+the end of each minute on stdout. The time is not sent to
+.B ntpd
+using the shared memory reference clock driver in this mode.
+.TP
+.B \-h, \-\-help
+Print a short synopsis of the command line arguments.
+.TP
+.B \-v, \-\-version
+Print the version number and then exit.
+.SH CONFIGURATION
+Configuration is very simple. Use server 127.127.28.0 in your ntp.conf file for
+a clock attached to the DCD line, server 127.127.28.1 for a clock attached to
+the CTS line, and server 127.127.28.2 for a clock attached to the DSR line. You
+will also want to use a fudge line on the server to change the displayed refid.
+.SH CALIBRATION
+Due to delays in the propogation of the radio signal, it's processing by the
+receiver board and the latency of the operating system the time decoded by the
+receiver will be slightly offset from actual UTC. Typically this delay will be
+less than 20ms, so unless you are very fussy about the time, or are using more
+than one time source, such as a GPS unit, other radio clock or NTP server on
+the internet you can ignore this section.
+
+The basics of the calibration procedure is to determine the average offset of
+the radio receiver, and use the time1 fudge factor in ntp.conf to bring the
+receiver as close as possible to the real time. The easiest way of determining
+the offset of the radio receivers time is to run it against a reference clock
+that does not suffer from these problems. The best reference clock would be a
+GPS unit. This might be a GPS unit that you don't wish to dedicate to time
+keeping, or a borrowed unit. If this is not possible you could use a stratum 1
+server on the internet.
+
+The method of calibration is quite simple. We attach the calibration reference
+clock to the computer and fudge the stratum of our radio receiver up to say 5.
+This way we can be sure that ntpd will lock onto the calibration reference
+clock. We need to make sure that ntpd is configured to collect peer statistics
+so make sure we have some lines similar to these in ntp.conf
+
+    statsdir /var/log/ntpstats/
+    statistics loopstats peerstats clockstats
+    filegen peerstats file peerstats type day enable
+
+After that we restart ntpd and leave it running for several hours. We can then
+make a copy the peerstats file. The trick is to remove all the entries before
+ntpd has come into close aggrement with the calibration reference clock and
+then run the peer.awk script in the scripts/stats directory of the ntp
+distribution. This will give us a mean offset of our radio receivers in
+milliseconds. This can them be converted into seconds and added to the fudge
+line in ntp.conf for our receiver.
+
+The final step is to remove the change in stratum level for our reference clock
+and restart ntpd. If you move the receiver any significant distance then you
+will need to repeat this calibration step. Across the room or around the
+current building will be fine, but if you move it to the next town/city then
+you will need to recalibrate.
+.SH IN USE
+The version of
+.B ntpd
+that comes with most Linux distributions does not have the shared memory
+reference clock driver compiled in by default. This can be identified by
+checking the logs after
+.B ntpd
+is started. If the shared memory reference clock driver is not compiled
+in then the logs will contain warnings about the reference clock driver
+not being recognized. To compile
+.B ntpd
+with the shared memory reference clock driver you must specify the
+.B --enable-SHM
+option when running configure.
+
+Neither
+.B radioclkd
+or
+.B ntpd
+ever mark the shared memory segment for deletion. If you stop using the
+shared memory reference clock driver therefore any shared memory segments
+will persist until you reboot or manually delete the segment using
+.B ipcrm.
+The segments can be identified as the one with key 0x4e545030, 0x4e545031
+or 0x4e545032 using the
+.B ipcs
+command.
+.SH BUGS
+If you are running a kernel with the PPS kit and have a clock attached to
+the DCD line you may experience lockups. If you encounter this problem the
+currently recomended solution is to move the clock to either the CTS or DSR
+lines.
+.\The code for decoding the JJY time signal is untested against a live received
+.\signal at this point in time. Though it is believed to function correctly.
+.\However you should procede with caution if you intend to use the JJY time
+.\signal until correct operation has been verified.
+.SH AUTHOR
+This program was written by Jonathan Buzzard <jonathan@buzzard.org.uk> and may
+be freely distributed under the terms of the GNU General Public License. There
+is ABSOLUTELY NO WARRANTY for this program.

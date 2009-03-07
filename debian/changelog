@@ -1,0 +1,79 @@
+radioclk (1.0-0) unstable; urgency=low
+
+  * New upstream version:
+
+ -- Jonathan Buzzard <jonathan@buzzard.org.uk>  Tue, 21 Jan 2003 12:14:33 +0000
+
+radioclk (0.12-1) unstable; urgency=low
+
+  * New upstream version:
+    - Brings manpages up to date.
+    - Uses its own UTCtime() function instead of mktime(), so logs are
+      in the local timezone.
+    - Fixes Bug#169182.
+  * debian/control: change long description now that radioclkd can
+    handle multiple receivers.
+  * Now using debhelper version 4.
+
+ -- Paul Martin <pm@debian.org>  Sat, 16 Nov 2002 14:42:40 +0000
+
+radioclk (0.11-3) unstable; urgency=low
+
+  * Fix typo in third ProcessStatusChange() call which affects dual 
+    receiver setups. (Closes: #169182)
+
+ -- Paul Martin <pm@debian.org>  Fri, 15 Nov 2002 10:47:18 +0000
+
+radioclk (0.11-2) unstable; urgency=low
+
+  * The "don't you just hate it when upstream modifies
+    debian/control and you don't notice" release.
+
+ -- Paul Martin <pm@debian.org>  Wed, 23 Oct 2002 00:16:23 +0100
+
+radioclk (0.11-1) unstable; urgency=low
+
+  * New upstream release
+    - added pulse time averaging for improved performance
+    - now decodes third clock on DSR as well
+    - fleshed out CONFIGURATION and CALIBRATION sections of manpage
+  * Brought manpage up to date with the new "third clock on DSR"
+    abilities.
+  * Changes to Makefile to comply with policy's DEB_BUILD_OPTIONS.
+  * Standards-Version 3.5.7.
+
+ -- Paul Martin <pm@debian.org>  Tue, 22 Oct 2002 23:36:42 +0100
+
+radioclk (0.10-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Paul Martin <pm@debian.org>  Tue, 30 Apr 2002 12:25:19 +0100
+
+radioclk (0.9-3) unstable; urgency=low
+
+  * Typo in README.Debian. WWVH should have been WWVB.
+
+ -- Paul Martin <pm@debian.org>  Sat, 13 Apr 2002 09:20:57 +0100
+
+radioclk (0.9-2) unstable; urgency=low
+
+  * Remove stray backslash from postinst file, and add prerm to clean
+    up the /etc/default/radioclk. (Closes: #141700)
+
+ -- Paul Martin <pm@debian.org>  Mon,  8 Apr 2002 03:20:10 +0100
+
+radioclk (0.9-1) unstable; urgency=low
+
+  * New upstream release
+  * Upload to main as ntp-refclock is now in main.
+
+ -- Paul Martin <pm@debian.org>  Mon,  1 Apr 2002 13:53:25 +0100
+
+radioclk (0.8-1) unstable; urgency=low
+
+  * Initial Release. (Closes: #135757)
+  * Thanks to bdale for modifying ntp-refclock's build to enable SHM.
+
+ -- Paul Martin <pm@debian.org>  Mon, 25 Mar 2002 14:59:37 +0000
+

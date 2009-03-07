@@ -1,0 +1,15 @@
+Source: radioclk
+Section: net
+Priority: extra
+Maintainer: Paul Martin <pm@debian.org>
+Build-Depends: debhelper (>= 4)
+Standards-Version: 3.5.7
+
+Package: radioclk
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ntp-refclock (>= 1:4.1.0-7)
+Description: simple ntp refclock daemon for MSF/WWVB/DCF77 time signals
+ radioclkd takes the demodulated time signals from simple MSF/WWVB/DCF77
+ time signal receivers on the control lines of a serial port, decodes 
+ the signals, and provides an interface to ntp via the shared memory
+ refclock driver.

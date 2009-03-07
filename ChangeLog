@@ -1,0 +1,98 @@
+2003-01-20  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: stricter testing of received WWVB code for errors
+	reject received times that differ by 1000 secs from system time
+
+	* radioclkd.1: removed references to WWVB decoding being untested
+	added note about lockups with PPS kit and the DCD line
+
+2003-01-19  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: fixed WWVB decoding so it works against a real signal
+	set timezone to UTC in testing mode so timestamps are actually UTC
+	changed CalculatePPSAverage to use 59 samples and fixed indexing bug
+	made sure clockInfo struct is properly reset at all appropriate points
+
+2002-11-16  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c:
+	use own replacement for mktime(), so logs are in the local time
+
+2002-10-25  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.1: merged Debian patches to the manpage for DSR line
+
+2002-10-24  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: fixed bugs in decoding of cts and dsr signals
+
+2002-10-17  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: added pulse time averaging for improved performance
+	now decodes third clock on DSR as well
+
+2002-04-13  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: inital dual receiver decoding version
+
+2002-04-10  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: fixed array indexing bug in DecodeMSF
+
+2002-03-31  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c:
+	fixed DCF77 and MSF decoders to deal with daylight savings
+
+2002-03-19  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c:
+	make sure only one copy of radioclkd is running at any one time
+
+2002-03-16  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.1:
+	take account of the fact two clocks can be handled on the one serial port
+
+2002-03-12  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: really fixed DCF77 decoding this time
+	backed out putting timestamps with LEAP_NOTINSYNC
+
+2002-03-05  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c:
+	put timestamp with LEAP_NOTINSYNC on error to reduce log noise
+
+2002-03-04  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.1: removed references to DCF77 code being untested
+
+	* radioclkd.c: fixed decoding of the DCF77 signal so it actually works
+
+2002-02-08  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.1: removed references to selecting radio clock type
+	added details of how to delete the shared memory segment
+
+	* radioclkd.c:
+	switched to using time_t internally to pass the time around
+
+2002-02-04  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: added autodetection of which time code is being received
+	converted WWVB decoding to more compact method
+
+2002-02-01  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: new more compact decoding routines for DCF77 and MSF
+	some bug fixes in PutTimeStamp
+
+2002-01-30  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.1: New file.
+
+2002-01-29  Jonathan Buzzard  <jab@jelly>
+
+	* radioclkd.c: New file.
+

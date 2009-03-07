@@ -1,0 +1,42 @@
+This is a simple daemon for a computer running Linux to decode the DCF77,
+MSF or WWVB time signal from a receiver which pulls the DCD, CTS or DSR pin of
+the serial port high and low in correspondence with the radio signal.
+
+Installation should be a dodle type 'make' to build the program. Provided
+you have the necessary permissions on the serial port you can then test
+it out. You can install the program with 'make install'. By default the
+program and manual page are installed in /usr/local. This can be changed
+by editing the make file.
+
+For more details on the command line arguments to the program please consult
+the manual page, and check the web page
+
+    http://www.buzzard.org.uk/jonathan/radioclock.html
+
+If you have problems getting the software to work using interrupts the
+following, command is known to resolve the problem in many instances.
+
+     stty crtscts < /dev/ttyS0
+
+where ttyS0 is the serial port the receiver is connected to. You may also want
+to try running
+
+     watch -n 1 cat /proc/interrupts.
+
+If the number of interrupts on the serial port is not steadily increasing then
+there is a problem with the serial port detecting interrupts. As a last resort
+you may specify a -p command line option to either program, in which case the
+programs will poll the serial port every 5ms. This uses slightly more CPU time
+
+If you are have to compile ntp yourself to include the SHM reference clock
+driver then you probably want to replace refclock_shm.c in the ntp
+distribution with the once included here. On the replacement version
+you can set flag3 to 1 and the reference clock will no longer log the
+fact that a new time stamp has not been found in the shared memory segment.
+
+
+JAB.
+
+-----------------------------------------------------------------------
+Jonathan A. Buzzard                 Email: jonathan@buzzard.org.uk
+Northumberland, United Kingdom.       Tel: +44 1661-832195
