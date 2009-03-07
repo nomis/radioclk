@@ -14,7 +14,7 @@ INSTALL-BIN = $(INSTALL)
 ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
 CFLAGS += -O0
 else
-CFLAGS += -O2
+CFLAGS += -Os
 endif
 ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
 INSTALL_BIN += -s
@@ -25,8 +25,8 @@ endif
 
 all: radioclkd
 
-radioclkd: radioclkd.o
-	$(CC) -o $@ radioclkd.o
+radioclkd: radioclkd.c
+	$(CC) -o $@ $<
 
 install: install-bin install-man
 
