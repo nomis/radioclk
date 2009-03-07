@@ -123,7 +123,6 @@ static const char rcsid[]="$Id: radioclkd.c,v 2.5 2003/01/20 16:48:33 jab Exp ja
 #include<string.h>
 #include<setjmp.h>
 
-
 #define PID_FILE _PATH_VARRUN "radioclkd.pid"
 
 /*
@@ -150,6 +149,7 @@ struct shmTime {
 struct clockInfo {
 	int count;
 	int status;
+	int report;
 	int error;
 	int frame;
 	int correct;
@@ -159,7 +159,7 @@ struct clockInfo {
 	int unit;
 	time_t last;
 	struct shmTime *stamp;
-	char line[4];
+	char line[7];
 	char code[128];
 	struct timeval pulses[128];
 };
@@ -172,9 +172,14 @@ int serial;
 int poll;
 int test;
 jmp_buf saved;
-struct clockInfo dcd,cts,dsr;
+struct clockInfo dcd,cts/*,dsr*/;
 
+FILE *fifo_msf;
+FILE *fifo_dcf77;
 
+/*
+FILE *fp;
+*/
 enum { MSF=0x01, DCF77=0x02, WWVB=0x04, JJY=0x08 };
 enum { LEAP_NOWARNING=0x00, LEAP_NOTINSYNC=0x03};
 
@@ -408,6 +413,7 @@ time_t DecodeWWVB(char *code, int length)
 
 	/* set the month and day of month fields */
 	decoded.tm_mon = -1;
+	decoded.tm_mday = -1;
 	for (i=11;i>=0;i--) {
 		if (months[i]<=decoded.tm_yday) {
 			decoded.tm_mon = i;
@@ -455,8 +461,8 @@ void LogNoSignalWarning(struct clockInfo *c, time_t now)
 {
 	if (((now-c->last)>300) && (c->last>-1) && (c->error==0)) {
 		c->error++;
-		syslog(LOG_INFO, "no valid time received in last five minutes "
-			"for %s line", c->line);
+//		syslog(LOG_INFO, "no valid time received in last five minutes "
+//			"for %s line", c->line);
 	}
 
 	return;
@@ -517,44 +523,44 @@ void SerialTimeoutAlarm(int sig)
  */
 int WaitOnSerialChange(int fd, struct timeval *tv)
 {
-	int i,arg,cts,dcd,dsr;
+	int i,arg,cts,dcd/*,dsr*/;
 
 
 	/* loop polling for the DCD, CTS or DSR line to change status */
 	if (poll==1) {
 		if (ioctl(fd, TIOCMGET, &arg)!=0)
 			return -1;
-		dcd = arg & TIOCM_CD;
+		dcd = arg & TIOCM_DSR;
 		cts = arg & TIOCM_CTS;
-		dsr = arg & TIOCM_DSR;
+//		dsr = arg & TIOCM_RNG;
 		for (i=0;i<2000;i++) {
 			usleep(5000);
 			if (ioctl(fd, TIOCMGET, &arg)!=0)
 				return -1;
 			gettimeofday(tv, NULL);
-			if ((dcd!=(arg & TIOCM_CD)) || (cts!=(arg & TIOCM_CTS))
-			    || (dsr!=(arg & TIOCM_DSR)))
+			if ((dcd!=(arg & TIOCM_DSR)) || (cts!=(arg & TIOCM_CTS))
+			   /* || (dsr!=(arg & TIOCM_RNG))*/ )
 				return arg;
 		}
 		/* nothing changed for 10 seconds return with error */
 		return -1;
 	}
 
-	/* set a timeout for TIOCMIWAIT */
-	if (setjmp(saved)!=0)
-		return -1;
-	signal(SIGALRM, SerialTimeoutAlarm);
-	alarm(10);
+//	/* set a timeout for TIOCMIWAIT */
+//	if (setjmp(saved)!=0)
+//		return -1;
+//	signal(SIGALRM, SerialTimeoutAlarm);
+//	alarm(10);
 
 	/* wait till a serial port status change interrupt is generated */
-	if (ioctl(fd, TIOCMIWAIT, TIOCM_CD | TIOCM_CTS | TIOCM_DSR)!=0)
+	if (ioctl(fd, TIOCMIWAIT, TIOCM_DSR | TIOCM_CTS /*| TIOCM_RNG*/)!=0)
 		return -1;
 	gettimeofday(tv, NULL);
 	if (ioctl(fd, TIOCMGET, &arg)!=0)
 		return -1;
 
-	/* cancel the timeout */
-	alarm(0);
+//	/* cancel the timeout */
+//	alarm(0);
 
 	return arg;
 }
@@ -577,6 +583,10 @@ void PutTimeStamp(struct timeval *local, struct timeval *radio,
 	shm->clockTimeStampUSec = (int) radio->tv_usec;
 	shm->receiveTimeStampSec = (time_t) local->tv_sec;
 	shm->receiveTimeStampUSec = (int) local->tv_usec;
+	shm->dummy[0] = 0;
+	shm->dummy[1] = 0;
+	shm->dummy[2] = 0;
+	shm->dummy[3] = 0;
 
 	__asm__ __volatile__ ("":::"memory");
 
@@ -658,7 +668,7 @@ void ProcessTimeCode(struct clockInfo *c, int radio)
 {
 	time_t decoded,last;
 	struct timeval computer,received;
-	int i,shmid,average;
+	int i,average;
 
 
 	/* decode the time */
@@ -684,22 +694,28 @@ void ProcessTimeCode(struct clockInfo *c, int radio)
 	if (test==0) {
 		/* final sanity check on the time */
 		if (abs(c->start.tv_sec-decoded)>1000) {
-			syslog(LOG_INFO, "decoded time differs from system "
-				"time by more than 1000s ignored");
+//		         syslog(LOG_INFO, "UTC: %s", ctime(&decoded));
+//			syslog(LOG_INFO, "decoded time differs from system "
+//				"time by more than 1000s ignored");
+			if (radio == DCF77) {
+				fprintf(fifo_dcf77, "DCF77: ERR %s", ctime(&decoded));
+			} else if (radio == MSF) {
+				fprintf(fifo_msf, "MSF:   ERR %s", ctime(&decoded));
+			}
 			c->count = 1;
 			c->marker = 0x00;
 			c->frame = 0;
 			c->correct = 0;
 			return;
-		}
-
-		/* attach shared memory segment if not already done */
-		if (c->stamp==NULL) {
-			c->stamp = AttachSharedMemory(c->unit, &shmid);
-			if ((shmid==-1) || (c->stamp==NULL)) {
-				syslog(LOG_INFO, "unable to attach shared "
-					"memory for %s", c->line);
-					return;
+		} else {
+//			if (radio == DCF77) fprintf(fp, "0 0 -1 %lu\n", decoded);
+//			else if (radio == MSF) fprintf(fp, "1 0 -1 %lu\n", decoded);
+			if (radio == DCF77) {
+				syslog(LOG_INFO, "DCF77: %s >%lu", ctime(&decoded), decoded);
+				fprintf(fifo_dcf77, "DCF77: UTC %s", ctime(&decoded));
+			} else if (radio == MSF) {
+				syslog(LOG_INFO, "MSF:   %s >%lu", ctime(&decoded), decoded);
+				fprintf(fifo_msf, "MSF:   UTC %s", ctime(&decoded));
 			}
 		}
 
@@ -725,13 +741,28 @@ void ProcessTimeCode(struct clockInfo *c, int radio)
 		/* log any errors in getting the time */
 		last = decoded-c->last;
 		if ((last>3600) && (c->error>0)) {
-			syslog(LOG_INFO, " %ldh %ldm since previous valid time "
-				"for %s line", last/3600, (last%3600)/60,
-				c->line);
+//			syslog(LOG_INFO, " %ldh %ldm since previous valid time "
+//				"for %s line", last/3600, (last%3600)/60,
+//				c->line);
+			if (radio == DCF77) {
+				syslog(LOG_INFO, "DCF77: OUT %ldh %ldm", last/3600, (last%3600)/60);
+				fprintf(fifo_dcf77, "DCF77: OUT %ldh %ldm\n", last/3600, (last%3600)/60);
+			} else if (radio == MSF) {
+				syslog(LOG_INFO, "MSF:   OUT %ldh %ldm", last/3600, (last%3600)/60);
+				fprintf(fifo_msf, "MSF:   OUT %ldh %ldm\n", last/3600, (last%3600)/60);
+			}
 		} else if ((last>300) && (c->error>0)) {
-			syslog(LOG_INFO, " %ldm since previous valid time for %s"
-				" line", last/60, c->line);
+//			syslog(LOG_INFO, " %ldm since previous valid time for %s"
+//				" line", last/60, c->line);
+			if (radio == DCF77) {
+				syslog(LOG_INFO, "DCF77: OUT %ldm", last/60);
+				fprintf(fifo_dcf77, "DCF77: OUT %ldm\n", last/60);
+			} else if (radio == MSF) {
+				syslog(LOG_INFO, "MSF:   OUT %ldm", last/60);
+				fprintf(fifo_msf, "MSF:   OUT %ldm\n", last/60);
+			}
 		}
+//		syslog(LOG_INFO, "UTC: %s", ctime(&decoded));
 	} else {
 		/* any valid time is printed in testing mode */
 		for (i=1;i<c->count;i++)
@@ -766,6 +797,7 @@ void ProcessStatusChange(struct clockInfo *c, int arg, struct timeval *tv)
 		c->start.tv_sec = tv->tv_sec;
 		c->start.tv_usec = tv->tv_usec;
 		timersub(&c->start, &c->end, &length);
+
 		/* check for the DCF77 minute marker */
 		if ((length.tv_sec==1) && (length.tv_usec>=760000) &&
 				(length.tv_usec<=950000) && (c->count>44)) {
@@ -784,6 +816,7 @@ void ProcessStatusChange(struct clockInfo *c, int arg, struct timeval *tv)
 
 	} else if ((arg) && (c->status==0)) {
 		c->status = 1;
+		c->report = 0;
 		c->end.tv_sec = tv->tv_sec;
 		c->end.tv_usec = tv->tv_usec;
 		timersub(&c->end, &c->start, &length);
@@ -813,7 +846,7 @@ void ProcessStatusChange(struct clockInfo *c, int arg, struct timeval *tv)
 			c->count++;
 			c->frame = 0;
 			c->marker = (c->marker<<1) | 1;
-		} else if ((length.tv_usec>=460000) && (length.tv_usec<550000)) {
+		} else if ((length.tv_usec>=440000) && (length.tv_usec<550000)) {
 			c->code[c->count] = 4;
 			c->pulses[c->count].tv_sec = c->start.tv_sec;
 			c->pulses[c->count].tv_usec = c->start.tv_usec;
@@ -870,8 +903,10 @@ void Catch(int sig)
 			shmdt(dcd.stamp);
 		if (cts.stamp!=NULL)
 			shmdt(cts.stamp);
+/*
 		if (dsr.stamp!=NULL)
 			shmdt(dsr.stamp);
+*/
 	} else {
 		fprintf(stderr, "radioclkd: Exiting...\n" );
 	}
@@ -892,8 +927,12 @@ int main(int argc, char *argv[])
 	time_t now;
 	FILE *str;
 	char devname[16] = "/dev/";
-
-
+	int fifo_dcf77_fd;
+	int fifo_msf_fd;
+/*
+	int p[2];
+	pipe(p);
+*/
 	/* process the command line arguments */
 	poll = 0;
 	test = 0;
@@ -909,16 +948,19 @@ int main(int argc, char *argv[])
 		} else if ((!strcmp(argv[i], "-t")) || (!strcmp(argv[i], "--test"))) {
 			test = 1;
 			/* switch timezone to UTC so time functions do right thing */
-			putenv("TZ=''");
 		} else {
 			strncat(devname, argv[i], 10);
 		}
 	}
+	putenv("TZ=UTC");
 			
 	if (strlen(devname)<6) {
 		fprintf(stderr, "radioclkd: error no serial port specified\n");
 		return 1;
 	}
+
+//	setreuid(0,0);
+//	setregid(0,0);
 
 	/* open the serial port */
 	if ((serial = open(devname, O_RDWR | O_NOCTTY | O_NDELAY))<0) {
@@ -961,8 +1003,23 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* initialize the three clock structures */
+	memset(&dcd, 0, sizeof(struct clockInfo));
+	memset(&cts, 0, sizeof(struct clockInfo));
+//	memset(&dsr, 0, sizeof(struct clockInfo));
+	dcd.count = cts.count = /*dsr.count = */ 1;
+	dcd.last = cts.last = /*dsr.last = */ -1;
+	dcd.unit = 1;
+	cts.unit = 2;
+//	dsr.unit = 3;
+	strcpy(dcd.line, "DCF77:");
+	strcpy(cts.line, "MSF:  ");
+//	strcpy(dsr.line, "ERR");
+
+
 	/* do things specific to the daemon version */
 	if (test==0) {
+		int shmid;
 		/* open connection to system logger */
 		openlog("radioclkd", LOG_PID | LOG_CONS, LOG_DAEMON);
 
@@ -1000,55 +1057,128 @@ int main(int argc, char *argv[])
 
 		/* set realtime scheduling priority */
 		memset(&schedp, 0, sizeof(schedp));
-		schedp.sched_priority = sched_get_priority_max(SCHED_FIFO);	
-		if (sched_setscheduler(0, SCHED_FIFO, &schedp)!=0)
+		schedp.sched_priority = sched_get_priority_max(SCHED_FIFO);
+		if (schedp.sched_priority > 15)
+			schedp.sched_priority -= 15;
+		if (sched_setscheduler(0, SCHED_FIFO, &schedp)!=0) {
 			syslog(LOG_INFO, "error unable to set real time "
 				"scheduling");
+			return 1;
+		}
+		//nice(-20);
 
 		/* lock all memory pages */
-		if (mlockall(MCL_CURRENT | MCL_FUTURE) !=0)
+		if (mlockall(MCL_CURRENT | MCL_FUTURE) !=0) {
 			syslog(LOG_INFO, "error unable to lock memory pages");
-	
+			return 1;
+		}
+
+		/* attach shared memory segment */
+		dcd.stamp = AttachSharedMemory(dcd.unit, &shmid);
+		if ((shmid==-1) || (dcd.stamp==NULL)) {
+			syslog(LOG_INFO, "unable to attach shared "
+				"memory for %s", dcd.line);
+				return 1;
+		}
+
+		cts.stamp = AttachSharedMemory(cts.unit, &shmid);
+		if ((shmid==-1) || (cts.stamp==NULL)) {
+			syslog(LOG_INFO, "unable to attach shared "
+				"memory for %s", cts.line);
+				return 1;
+		}
+
+//		dsr.stamp = AttachSharedMemory(dsr.unit, &shmid);
+//		if ((shmid==-1) || (dsr.stamp==NULL)) {
+//			syslog(LOG_INFO, "unable to attach shared "
+//				"memory for %s", dsr.line);
+//				return 1;
+//		}
 	}
 
+	setregid(1026,1026);
+	setreuid(1016,1016);
+
 	/* pause a few seconds to allow receiver(s) to power up */
-	sleep(5);
+//	sleep(5);
+
+	fifo_dcf77_fd = open("DCF77", O_RDWR | O_NONBLOCK);
+	fifo_dcf77 = fdopen(fifo_dcf77_fd, "w");
+	fifo_msf_fd = open("MSF", O_RDWR | O_NONBLOCK);
+	fifo_msf = fdopen(fifo_msf_fd, "w");
 
 	/* some safety precautions */
 	chdir("/");
 	umask(0);
 
-	/* initialize the three clock structures */
-	memset(&dcd, 0, sizeof(struct clockInfo));
-	memset(&cts, 0, sizeof(struct clockInfo));
-	memset(&dsr, 0, sizeof(struct clockInfo));
-	dcd.count = cts.count = dsr.count = 1;
-	dcd.last = cts.last = dsr.last = -1;
-	dcd.unit = 0;
-	cts.unit = 1;
-	dsr.unit = 2;
-	strcpy(dcd.line, "DCD");
-	strcpy(cts.line, "CTS");
-	strcpy(dsr.line, "DSR");
+/*
+	if (fork()==0) {
+		int signal;
+		long sec;
+		int code;
+		int dur;
+
+		close(p[1]);
+		fp = fdopen(p[0],"r");
+		while (!feof(fp)) {
+			fscanf(fp, "%d %lu %d %d\n", &signal, &sec, &code, &dur);
+			if (dur != -1) {
+				printf("%s: %lu\n", (signal == 0 ? "DCF77" : (signal == 1 ? "MSF" : "ERR")), sec);
+			} else {
+				printf("%s: UTC %s\n", (signal == 0 ? "DCF77" : (signal == 1 ? "MSF" : "ERR")), ctime(&sec));
+			}
+		}
+		return 0;
+	}
+	close(p[0]);
+	fp = fdopen(p[1],"w");
+*/
+
+	close(0);
+	close(1);
+	close(2);
 
 	/* loop  until we die */
 	for (;;) {
 		arg = WaitOnSerialChange(serial, &tv);
 
 		/* first process any clock on the DCD status line */
-		ProcessStatusChange(&dcd, (arg & TIOCM_CD), &tv);
+		ProcessStatusChange(&dcd, (arg & TIOCM_DSR), &tv);
 
 		/* now do the same for a clock on the CTS line */
 		ProcessStatusChange(&cts, (arg & TIOCM_CTS), &tv);
 
 		/* now do the same for a clock on the DSR line */
-		ProcessStatusChange(&dsr, (arg & TIOCM_DSR), &tv);
+//		ProcessStatusChange(&dsr, (arg & TIOCM_RNG), &tv);
+
+   	if (!dcd.report) {
+		   struct timeval tv;
+		dcd.report = 1;
+
+		   timersub(&dcd.end, &dcd.start, &tv);
+//			 syslog(LOG_INFO, "%s: %3d %4d %9d", dcd.line, dcd.count-2,
+//	 			dcd.code[dcd.count-1], (int) tv.tv_usec);
+			 fprintf(fifo_dcf77, "DCF77: %3d %4d %9d\n", dcd.count-2,
+				dcd.code[dcd.count-1], (int) tv.tv_usec);
+			fflush(fifo_dcf77);
+		}
+ 	if (!cts.report) {
+		   struct timeval tv;
+		cts.report = 1;
+
+		   timersub(&cts.end, &cts.start, &tv);
+//			 syslog(LOG_INFO, "%s: %3d %4d %9d", cts.line, cts.count-1,
+//				cts.code[cts.count-1], (int) tv.tv_usec);
+			 fprintf(fifo_msf, "MSF:   %3d %4d %9d\n", cts.count-1,
+				cts.code[cts.count-1], (int) tv.tv_usec);
+			fflush(fifo_msf);
+		}
 
 		/* print pulse information on stdout if in test mode */
-		if ((test==1) && ((dcd.status==1) || (cts.status==1) || (dsr.status==1))) {
+		if ((test==1) && ((dcd.status==1) || (cts.status==1)/* || (dsr.status==1)*/)) {
 			PrintPulseInfo(&dcd);
 			PrintPulseInfo(&cts);
-			PrintPulseInfo(&dsr);
+//			PrintPulseInfo(&dsr);
 			fprintf(stdout, "\n");
 		}
 
@@ -1056,7 +1186,7 @@ int main(int argc, char *argv[])
 		time(&now);
 		LogNoSignalWarning(&dcd, now);
 		LogNoSignalWarning(&cts, now);
-		LogNoSignalWarning(&dsr, now);
+//		LogNoSignalWarning(&dsr, now);
 	}
 
 	return 0;
